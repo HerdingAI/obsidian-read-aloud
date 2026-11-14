@@ -1,0 +1,107 @@
+.read-aloud-mini-player {
+  position: fixed;
+  right: 20px;
+  bottom: 36px;
+  z-index: 999;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.read-aloud-mini-player.is-hidden {
+  display: none;
+}
+
+.read-aloud-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.read-aloud-icon {
+  color: var(--interactive-accent);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.read-aloud-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.read-aloud-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.read-aloud-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.read-aloud-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.read-aloud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.read-aloud-btn:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+}
+
+.read-aloud-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.read-aloud-btn-primary {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.read-aloud-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--interactive-accent);
+}
+
+.read-aloud-rate {
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.read-aloud-status-bar {
+  cursor: pointer;
+}

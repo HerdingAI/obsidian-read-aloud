@@ -1,0 +1,9 @@
+{
+  "id": "read-aloud",
+  "name": "Read Aloud",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Transform notes into natural listenable scripts using local/CLI AI harnesses and read them aloud with GPU-accelerated local TTS or Web Speech.",
+  "author": "Carlos Rivero",
+  "isDesktopOnly": false
+}
