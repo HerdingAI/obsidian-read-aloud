@@ -1,14 +1,11 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import {
   KOKORO_VOICES,
-  PIPER_VOICE_PRESETS,
   detectHardware,
   getKokoroInstallStatus,
   installKokoroSelfContained,
-  installPiperVoicePreset,
 } from "./installer";
 import type ReadAloudPlugin from "./main";
-import { discoverPiperModels } from "./tts-engines";
 import { ListenableProvider, TtsEngineType } from "./types";
 
 export class ReadAloudSettingTab extends PluginSettingTab {
@@ -160,7 +157,7 @@ export class ReadAloudSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Cache listenable scripts")
-      .setDesc("Avoid regenerating the script when re-playing an unchanged note.")
+      .setDesc("Persist generated scripts on disk to avoid re-running LLMs for unchanged notes.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.enableListenableCache)
@@ -171,12 +168,29 @@ export class ReadAloudSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Clear script cache")
-      .setDesc("Remove cached listenable scripts from memory.")
+      .setName("Cache generated audio")
+      .setDesc("Save synthesized audio clips on disk so re-listening is instant with zero reprocessing.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableAudioCache)
+          .onChange(async (v) => {
+            this.plugin.settings.enableAudioCache = v;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    const stats = this.plugin.cache.getStats();
+    const sizeMb = (stats.totalBytes / (1024 * 1024)).toFixed(2);
+    new Setting(containerEl)
+      .setName("Clear persistent cache")
+      .setDesc(
+        `Currently cached: ${stats.scriptCount} scripts, ${stats.audioCount} audio clips (${sizeMb} MB).`
+      )
       .addButton((btn) =>
         btn.setButtonText("Clear cache").onClick(() => {
-          this.plugin.generator.clearCache();
-          new Notice("Listenable script cache cleared.");
+          this.plugin.cache.clear();
+          new Notice("Read Aloud script and audio cache cleared.");
+          this.display();
         })
       );
 
@@ -186,12 +200,11 @@ export class ReadAloudSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("TTS engine")
       .setDesc(
-        "Use Self-Contained Kokoro-82M (studio voices), Local Piper CLI (desktop), Local GPU HTTP TTS (/v1/audio/speech), or Web Speech API."
+        "Use Self-Contained Kokoro-82M (studio voices), Local GPU HTTP TTS (/v1/audio/speech), or Web Speech API."
       )
       .addDropdown((dd) =>
         dd
           .addOption("kokoro", "Kokoro-82M (Self-Contained Studio)")
-          .addOption("piper", "Local Piper CLI (Desktop)")
           .addOption("http-tts", "Local GPU HTTP TTS (/v1/audio/speech)")
           .addOption("web-speech", "Web Speech API (Cross-Platform)")
           .setValue(this.plugin.settings.ttsEngine)
@@ -250,86 +263,6 @@ export class ReadAloudSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
         });
-    } else if (te === "piper") {
-      const discovered = discoverPiperModels();
-      new Setting(containerEl)
-        .setName("Piper binary")
-        .setDesc("Command name or full path to piper.")
-        .addText((t) =>
-          t
-            .setPlaceholder("piper")
-            .setValue(this.plugin.settings.piperPath)
-            .onChange(async (v) => {
-              this.plugin.settings.piperPath = v.trim() || "piper";
-              await this.plugin.saveSettings();
-            })
-        );
-
-      new Setting(containerEl)
-        .setName("Piper .onnx model path")
-        .setDesc(
-          discovered.length > 0
-            ? `Leave blank to auto-use: ${discovered[0]}`
-            : "Path to a local .onnx voice model."
-        )
-        .addText((t) =>
-          t
-            .setPlaceholder(discovered[0] || "/path/to/voice.onnx")
-            .setValue(this.plugin.settings.piperModelPath)
-            .onChange(async (v) => {
-              this.plugin.settings.piperModelPath = v.trim();
-              await this.plugin.saveSettings();
-            })
-        );
-
-      let selectedPreset = PIPER_VOICE_PRESETS[0].id;
-      const presetSetting = new Setting(containerEl)
-        .setName("Download Piper voice")
-        .setDesc("One-click download into ~/.cache/obsidian-read-aloud/voices/piper/")
-        .addDropdown((dd) => {
-          for (const p of PIPER_VOICE_PRESETS) {
-            dd.addOption(p.id, p.label);
-          }
-          dd.setValue(selectedPreset).onChange((v) => {
-            selectedPreset = v;
-          });
-        })
-        .addButton((btn) =>
-          btn.setButtonText("Download").onClick(async () => {
-            const preset = PIPER_VOICE_PRESETS.find((p) => p.id === selectedPreset);
-            if (!preset) return;
-            btn.setDisabled(true);
-            btn.setButtonText("Downloading...");
-            try {
-              const onnxPath = await installPiperVoicePreset(preset, (msg) => {
-                presetSetting.setDesc(msg);
-              });
-              this.plugin.settings.piperModelPath = onnxPath;
-              await this.plugin.saveSettings();
-              new Notice(`Downloaded ${preset.id}`);
-              this.display();
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              new Notice(`Download failed: ${msg}`);
-              btn.setDisabled(false);
-              btn.setButtonText("Download");
-            }
-          })
-        );
-
-      new Setting(containerEl)
-        .setName("Use NVIDIA CUDA (--cuda)")
-        .setDesc(
-          "Use GPU acceleration when available; automatically falls back to CPU if CUDA/NVML is unavailable."
-        )
-        .addToggle((toggle) =>
-          toggle
-            .setValue(this.plugin.settings.piperUseCuda)
-            .onChange(async (v) => {
-              this.plugin.settings.piperUseCuda = v;
-              await this.plugin.saveSettings();
-            })
-        );
     } else if (te === "http-tts") {
       new Setting(containerEl)
         .setName("Audio speech URL")

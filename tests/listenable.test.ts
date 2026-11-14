@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PersistentCache } from "../src/cache";
 import { ListenableGenerator } from "../src/listenable";
 import { DEFAULT_SETTINGS } from "../src/types";
 
@@ -10,7 +11,11 @@ describe("ListenableGenerator", () => {
       exitCode: 0,
     });
 
-    const gen = new ListenableGenerator({ cliRunner, isDesktop: true });
+    const gen = new ListenableGenerator({
+      cliRunner,
+      isDesktop: true,
+      cache: new PersistentCache(false),
+    });
     const settings = { ...DEFAULT_SETTINGS, listenableProvider: "agy" as const };
 
     const first = await gen.generate("# Title\nBody", "My Note", settings);
@@ -33,7 +38,11 @@ describe("ListenableGenerator", () => {
       exitCode: 0,
     });
 
-    const gen = new ListenableGenerator({ cliRunner, isDesktop: true });
+    const gen = new ListenableGenerator({
+      cliRunner,
+      isDesktop: true,
+      cache: new PersistentCache(false),
+    });
     const settings = { ...DEFAULT_SETTINGS, listenableProvider: "claude" as const };
 
     const res = await gen.generate("Hello **world**", "Note", settings);
@@ -56,7 +65,11 @@ describe("ListenableGenerator", () => {
       exitCode: 1,
     });
 
-    const gen = new ListenableGenerator({ cliRunner, isDesktop: true });
+    const gen = new ListenableGenerator({
+      cliRunner,
+      isDesktop: true,
+      cache: new PersistentCache(false),
+    });
     const settings = { ...DEFAULT_SETTINGS, listenableProvider: "agy" as const };
 
     const res = await gen.generate("# Heading\nSome **bold** text.", "Note", settings);
@@ -73,7 +86,11 @@ describe("ListenableGenerator", () => {
       text: "",
     });
 
-    const gen = new ListenableGenerator({ httpPoster, isDesktop: true });
+    const gen = new ListenableGenerator({
+      httpPoster,
+      isDesktop: true,
+      cache: new PersistentCache(false),
+    });
     const settings = { ...DEFAULT_SETTINGS, listenableProvider: "ollama" as const };
 
     const res = await gen.generate("Test content", "Note", settings);

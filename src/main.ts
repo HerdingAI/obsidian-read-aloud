@@ -1,11 +1,11 @@
 import { MarkdownView, Notice, Plugin } from "obsidian";
+import { PersistentCache } from "./cache";
 import { ListenableGenerator } from "./listenable";
 import { ReadAloudPlayer } from "./player";
 import { ReadAloudSettingTab } from "./settings";
 import {
   HttpTtsEngine,
   KokoroWorkerEngine,
-  PiperTtsEngine,
   TtsEngine,
   WebSpeechTtsEngine,
 } from "./tts-engines";
@@ -14,9 +14,9 @@ import { MiniPlayerBar } from "./ui/player-bar";
 
 export default class ReadAloudPlugin extends Plugin {
   settings: ReadAloudSettings = { ...DEFAULT_SETTINGS };
-  generator = new ListenableGenerator();
+  cache = new PersistentCache();
+  generator = new ListenableGenerator({ cache: this.cache });
   private kokoroEngine!: KokoroWorkerEngine;
-  private piperEngine!: PiperTtsEngine;
   private httpTtsEngine!: HttpTtsEngine;
   private webSpeechEngine!: WebSpeechTtsEngine;
   player!: ReadAloudPlayer;
@@ -27,9 +27,8 @@ export default class ReadAloudPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    this.kokoroEngine = new KokoroWorkerEngine(() => this.settings);
-    this.piperEngine = new PiperTtsEngine(() => this.settings);
-    this.httpTtsEngine = new HttpTtsEngine(() => this.settings);
+    this.kokoroEngine = new KokoroWorkerEngine(() => this.settings, this.cache);
+    this.httpTtsEngine = new HttpTtsEngine(() => this.settings, this.cache);
     this.webSpeechEngine = new WebSpeechTtsEngine(() => this.settings);
 
     this.player = new ReadAloudPlayer(
@@ -139,8 +138,6 @@ export default class ReadAloudPlugin extends Plugin {
     switch (this.settings.ttsEngine) {
       case "kokoro":
         return this.kokoroEngine;
-      case "piper":
-        return this.piperEngine;
       case "http-tts":
         return this.httpTtsEngine;
       default:

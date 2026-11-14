@@ -1,5 +1,6 @@
 import { Platform, requestUrl } from "obsidian";
-import { cleanMarkdownForSpeech, hashContent } from "./markdown-cleaner";
+import { PersistentCache, makeCacheKey } from "./cache";
+import { cleanMarkdownForSpeech } from "./markdown-cleaner";
 import { ListenableProvider, ReadAloudSettings } from "./types";
 
 export interface ListenableResult {
@@ -185,7 +186,7 @@ export const defaultHttpPoster: HttpJsonPoster = async (url, headers, body) => {
 };
 
 export class ListenableGenerator {
-  private cache = new Map<string, string>();
+  private cache: PersistentCache;
   private cliRunner: CliRunner;
   private httpPoster: HttpJsonPoster;
   private isDesktop: boolean;
@@ -194,10 +195,12 @@ export class ListenableGenerator {
     cliRunner?: CliRunner;
     httpPoster?: HttpJsonPoster;
     isDesktop?: boolean;
+    cache?: PersistentCache;
   }) {
     this.cliRunner = deps?.cliRunner ?? defaultCliRunner;
     this.httpPoster = deps?.httpPoster ?? defaultHttpPoster;
     this.isDesktop = deps?.isDesktop ?? Platform.isDesktopApp;
+    this.cache = deps?.cache ?? new PersistentCache(this.isDesktop);
   }
 
   clearCache(): void {
@@ -223,16 +226,22 @@ export class ListenableGenerator {
     }
 
     const modelKey = this.getModelKey(settings);
-    const cacheKey = `${provider}:${modelKey}:${hashContent(
-      settings.listenableSystemPrompt + "\n" + rawMarkdown
-    )}`;
+    const cacheKey = makeCacheKey([
+      provider,
+      modelKey,
+      settings.listenableSystemPrompt,
+      rawMarkdown,
+    ]);
 
-    if (settings.enableListenableCache && this.cache.has(cacheKey)) {
-      return {
-        script: this.cache.get(cacheKey)!,
-        providerUsed: provider,
-        cached: true,
-      };
+    if (settings.enableListenableCache) {
+      const cachedScript = this.cache.getScript(cacheKey);
+      if (cachedScript) {
+        return {
+          script: cachedScript,
+          providerUsed: provider,
+          cached: true,
+        };
+      }
     }
 
     const prompt = this.buildPrompt(rawMarkdown, title, settings);
@@ -334,7 +343,7 @@ export class ListenableGenerator {
       }
 
       if (settings.enableListenableCache) {
-        this.cache.set(cacheKey, generated);
+        this.cache.setScript(cacheKey, generated);
       }
 
       return {

@@ -18,13 +18,6 @@ export interface KokoroInstallStatus {
   workerPath: string;
 }
 
-export interface PiperVoicePreset {
-  id: string;
-  label: string;
-  onnxUrl: string;
-  jsonUrl: string;
-}
-
 export const KOKORO_VOICES = [
   { id: "af_heart", label: "Heart (US Female, Warm)" },
   { id: "af_bella", label: "Bella (US Female, Clear)" },
@@ -34,41 +27,6 @@ export const KOKORO_VOICES = [
   { id: "am_michael", label: "Michael (US Male, Natural)" },
   { id: "bf_emma", label: "Emma (UK Female)" },
   { id: "bm_george", label: "George (UK Male)" },
-];
-
-export const PIPER_VOICE_PRESETS: PiperVoicePreset[] = [
-  {
-    id: "en_US-lessac-high",
-    label: "Lessac High (US Female, Natural)",
-    onnxUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx",
-    jsonUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json",
-  },
-  {
-    id: "en_US-ryan-high",
-    label: "Ryan High (US Male, Crisp)",
-    onnxUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx",
-    jsonUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx.json",
-  },
-  {
-    id: "en_GB-alba-medium",
-    label: "Alba Medium (UK Female)",
-    onnxUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx",
-    jsonUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json",
-  },
-  {
-    id: "en_US-amy-medium",
-    label: "Amy Medium (US Female, Fast)",
-    onnxUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx",
-    jsonUrl:
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json",
-  },
 ];
 
 const KOKORO_MODEL_URL =
@@ -138,7 +96,6 @@ export function getCachePaths() {
     modelPath: path.join(root, "models", "kokoro", "kokoro-v1.0.int8.onnx"),
     voicesPath: path.join(root, "models", "kokoro", "voices-v1.0.bin"),
     workerPath: path.join(root, "kokoro_worker.py"),
-    piperVoicesDir: path.join(root, "voices", "piper"),
   };
 }
 
@@ -339,26 +296,4 @@ export async function installKokoroSelfContained(
 
   onProgress("Kokoro-82M ready.");
   return getKokoroInstallStatus();
-}
-
-export async function installPiperVoicePreset(
-  preset: PiperVoicePreset,
-  onProgress: (msg: string) => void
-): Promise<string> {
-  if (!Platform.isDesktopApp) {
-    throw new Error("Piper voice download is only supported on desktop.");
-  }
-  const path = require("path") as typeof import("path");
-  const fs = require("fs") as typeof import("fs");
-  const p = getCachePaths();
-  fs.mkdirSync(p.piperVoicesDir, { recursive: true });
-
-  const onnxPath = path.join(p.piperVoicesDir, `${preset.id}.onnx`);
-  const jsonPath = path.join(p.piperVoicesDir, `${preset.id}.onnx.json`);
-
-  onProgress(`Downloading ${preset.label}...`);
-  await downloadFile(preset.onnxUrl, onnxPath);
-  await downloadFile(preset.jsonUrl, jsonPath);
-  onProgress(`Installed ${preset.id}`);
-  return onnxPath;
 }

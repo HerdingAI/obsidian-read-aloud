@@ -5,7 +5,7 @@ export type ListenableProvider =
   | "http-llm"
   | "direct";
 
-export type TtsEngineType = "kokoro" | "piper" | "http-tts" | "web-speech";
+export type TtsEngineType = "kokoro" | "http-tts" | "web-speech";
 
 export type PlaybackState = "idle" | "generating" | "playing" | "paused";
 
@@ -29,15 +29,10 @@ export interface ReadAloudSettings {
   speechRate: number;
   skipCodeBlocks: boolean;
   showMiniPlayer: boolean;
+  enableAudioCache: boolean;
 
   // Kokoro-82M (Self-contained managed worker)
   kokoroVoice: string;
-
-  // Piper CLI (Desktop)
-  piperPath: string;
-  piperModelPath: string;
-  piperUseCuda: boolean;
-  piperSpeakerId: string;
 
   // OpenAI-compatible HTTP TTS (MLX-Audio on Apple Silicon, Kokoro-FastAPI on NVIDIA, OpenAI)
   httpTtsUrl: string;
@@ -75,17 +70,13 @@ export const DEFAULT_SETTINGS: ReadAloudSettings = {
   listenableSystemPrompt: DEFAULT_LISTENABLE_PROMPT,
   enableListenableCache: true,
 
-  ttsEngine: "piper",
+  ttsEngine: "kokoro",
   speechRate: 1.0,
   skipCodeBlocks: true,
   showMiniPlayer: true,
+  enableAudioCache: true,
 
   kokoroVoice: "af_heart",
-
-  piperPath: "piper",
-  piperModelPath: "",
-  piperUseCuda: true,
-  piperSpeakerId: "",
 
   httpTtsUrl: "http://127.0.0.1:8880/v1/audio/speech",
   httpTtsModel: "kokoro",

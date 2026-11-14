@@ -7,16 +7,16 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "package": "npm test && npm run build && mkdir -p release/read-aloud && cp main.js manifest.json styles.css versions.json release/read-aloud/ && cd release && zip -r read-aloud-0.1.0.zip read-aloud"
   },
   "keywords": [
     "obsidian",
     "obsidian-plugin",
     "tts",
     "read-aloud",
-    "piper",
-    "mlx-audio",
-    "kokoro"
+    "kokoro",
+    "mlx-audio"
   ],
   "license": "MIT",
   "devDependencies": {
