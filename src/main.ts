@@ -4,6 +4,7 @@ import { ReadAloudPlayer } from "./player";
 import { ReadAloudSettingTab } from "./settings";
 import {
   HttpTtsEngine,
+  KokoroWorkerEngine,
   PiperTtsEngine,
   TtsEngine,
   WebSpeechTtsEngine,
@@ -14,6 +15,7 @@ import { MiniPlayerBar } from "./ui/player-bar";
 export default class ReadAloudPlugin extends Plugin {
   settings: ReadAloudSettings = { ...DEFAULT_SETTINGS };
   generator = new ListenableGenerator();
+  private kokoroEngine!: KokoroWorkerEngine;
   private piperEngine!: PiperTtsEngine;
   private httpTtsEngine!: HttpTtsEngine;
   private webSpeechEngine!: WebSpeechTtsEngine;
@@ -25,6 +27,7 @@ export default class ReadAloudPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
+    this.kokoroEngine = new KokoroWorkerEngine(() => this.settings);
     this.piperEngine = new PiperTtsEngine(() => this.settings);
     this.httpTtsEngine = new HttpTtsEngine(() => this.settings);
     this.webSpeechEngine = new WebSpeechTtsEngine(() => this.settings);
@@ -127,12 +130,15 @@ export default class ReadAloudPlugin extends Plugin {
 
   onunload(): void {
     this.player?.stop();
+    this.kokoroEngine?.dispose();
     this.unsubscribeStatus?.();
     this.miniPlayer?.unmount();
   }
 
   private getActiveEngine(): TtsEngine {
     switch (this.settings.ttsEngine) {
+      case "kokoro":
+        return this.kokoroEngine;
       case "piper":
         return this.piperEngine;
       case "http-tts":

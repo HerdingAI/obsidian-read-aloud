@@ -1,4 +1,5 @@
 import { Platform, requestUrl } from "obsidian";
+import { getCachePaths, getKokoroInstallStatus } from "./installer";
 import { buildDesktopEnv, resolveDesktopBinary } from "./listenable";
 import { ReadAloudSettings } from "./types";
 
@@ -22,6 +23,7 @@ export function discoverPiperModels(): string[] {
 
     const home = os.homedir();
     const searchDirs = [
+      getCachePaths().piperVoicesDir,
       path.join(home, ".local", "share", "piper-voices"),
       path.join(home, ".local", "share", "piper"),
       path.join(home, "piper-voices"),
@@ -100,6 +102,190 @@ function playAudioBuffer(
       reject(err instanceof Error ? err : new Error(String(err)));
     });
   });
+}
+
+export class KokoroWorkerEngine implements TtsEngine {
+  readonly id = "kokoro";
+  private activeAudio: HTMLAudioElement | null = null;
+  private worker: import("child_process").ChildProcessWithoutNullStreams | null = null;
+  private readyPromise: Promise<void> | null = null;
+  private pendingResolve: ((line: string) => void) | null = null;
+  private pendingReject: ((err: Error) => void) | null = null;
+  private stdoutBuffer = "";
+
+  constructor(private getSettings: () => ReadAloudSettings) {}
+
+  pause(): void {
+    this.activeAudio?.pause();
+  }
+
+  resume(): void {
+    void this.activeAudio?.play();
+  }
+
+  stop(): void {
+    if (this.activeAudio) {
+      this.activeAudio.pause();
+      this.activeAudio.src = "";
+      this.activeAudio = null;
+    }
+  }
+
+  dispose(): void {
+    this.stop();
+    if (this.worker) {
+      this.worker.kill("SIGTERM");
+      this.worker = null;
+      this.readyPromise = null;
+    }
+  }
+
+  private ensureWorker(): Promise<void> {
+    if (this.worker && this.readyPromise) {
+      return this.readyPromise;
+    }
+
+    const status = getKokoroInstallStatus();
+    if (!status.installed) {
+      return Promise.reject(
+        new Error(
+          "Kokoro-82M is not installed yet. Open Settings -> Read Aloud and click 'Install Kokoro-82M'."
+        )
+      );
+    }
+
+    const { spawn } = require("child_process") as typeof import("child_process");
+    const child = spawn(
+      status.pythonPath,
+      [status.workerPath, status.modelPath, status.voicesPath],
+      {
+        env: buildDesktopEnv(),
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    this.worker = child;
+    this.stdoutBuffer = "";
+
+    this.readyPromise = new Promise<void>((resolve, reject) => {
+      let isReady = false;
+      let stderrTail = "";
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderrTail = (stderrTail + chunk.toString("utf8")).slice(-1000);
+      });
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        this.stdoutBuffer += chunk.toString("utf8");
+        let idx = this.stdoutBuffer.indexOf("\n");
+        while (idx !== -1) {
+          const line = this.stdoutBuffer.slice(0, idx).trim();
+          this.stdoutBuffer = this.stdoutBuffer.slice(idx + 1);
+          if (line) {
+            if (!isReady) {
+              try {
+                const msg = JSON.parse(line) as { ready?: boolean; error?: string };
+                if (msg.ready) {
+                  isReady = true;
+                  resolve();
+                } else if (msg.error) {
+                  reject(new Error(msg.error));
+                }
+              } catch {
+                // Ignore non-JSON startup lines
+              }
+            } else if (this.pendingResolve) {
+              const r = this.pendingResolve;
+              this.pendingResolve = null;
+              this.pendingReject = null;
+              r(line);
+            }
+          }
+          idx = this.stdoutBuffer.indexOf("\n");
+        }
+      });
+
+      child.on("error", (err) => {
+        this.worker = null;
+        this.readyPromise = null;
+        if (!isReady) reject(err);
+        else this.pendingReject?.(err);
+      });
+
+      child.on("close", (code) => {
+        this.worker = null;
+        this.readyPromise = null;
+        const err = new Error(
+          stderrTail.trim() || `Kokoro worker exited with code ${code}`
+        );
+        if (!isReady) reject(err);
+        else this.pendingReject?.(err);
+      });
+    });
+
+    return this.readyPromise;
+  }
+
+  async speak(text: string, rate: number, signal: AbortSignal): Promise<void> {
+    if (!Platform.isDesktopApp) {
+      throw new Error("Self-contained Kokoro worker is only available on desktop.");
+    }
+    if (signal.aborted) throw new Error("Aborted");
+
+    await this.ensureWorker();
+    if (signal.aborted) throw new Error("Aborted");
+
+    const fs = require("fs") as typeof import("fs");
+    const os = require("os") as typeof import("os");
+    const path = require("path") as typeof import("path");
+    const tmpWav = path.join(
+      os.tmpdir(),
+      `obsidian-kokoro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`
+    );
+
+    const payload = JSON.stringify({
+      text,
+      voice: this.getSettings().kokoroVoice || "af_heart",
+      speed: Math.max(0.5, Math.min(2.0, rate)),
+      out_wav: tmpWav,
+    });
+
+    const responseLine = await new Promise<string>((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Kokoro worker is not running"));
+        return;
+      }
+      this.pendingResolve = resolve;
+      this.pendingReject = reject;
+      this.worker.stdin.write(payload + "\n");
+    });
+
+    const parsed = JSON.parse(responseLine) as {
+      ok?: boolean;
+      error?: string;
+      wav?: string;
+    };
+    if (!parsed.ok) {
+      throw new Error(parsed.error || "Kokoro synthesis failed");
+    }
+
+    try {
+      const buf = fs.readFileSync(tmpWav);
+      const arrayBuf = buf.buffer.slice(
+        buf.byteOffset,
+        buf.byteOffset + buf.byteLength
+      );
+      await playAudioBuffer(arrayBuf, "audio/wav", signal, (a) => {
+        this.activeAudio = a;
+      });
+    } finally {
+      try {
+        if (fs.existsSync(tmpWav)) fs.unlinkSync(tmpWav);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
 }
 
 export class PiperTtsEngine implements TtsEngine {

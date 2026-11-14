@@ -5,7 +5,7 @@ export type ListenableProvider =
   | "http-llm"
   | "direct";
 
-export type TtsEngineType = "piper" | "http-tts" | "web-speech";
+export type TtsEngineType = "kokoro" | "piper" | "http-tts" | "web-speech";
 
 export type PlaybackState = "idle" | "generating" | "playing" | "paused";
 
@@ -29,6 +29,9 @@ export interface ReadAloudSettings {
   speechRate: number;
   skipCodeBlocks: boolean;
   showMiniPlayer: boolean;
+
+  // Kokoro-82M (Self-contained managed worker)
+  kokoroVoice: string;
 
   // Piper CLI (Desktop)
   piperPath: string;
@@ -76,6 +79,8 @@ export const DEFAULT_SETTINGS: ReadAloudSettings = {
   speechRate: 1.0,
   skipCodeBlocks: true,
   showMiniPlayer: true,
+
+  kokoroVoice: "af_heart",
 
   piperPath: "piper",
   piperModelPath: "",

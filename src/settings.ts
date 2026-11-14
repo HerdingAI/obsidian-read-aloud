@@ -1,4 +1,12 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import {
+  KOKORO_VOICES,
+  PIPER_VOICE_PRESETS,
+  detectHardware,
+  getKokoroInstallStatus,
+  installKokoroSelfContained,
+  installPiperVoicePreset,
+} from "./installer";
 import type ReadAloudPlugin from "./main";
 import { discoverPiperModels } from "./tts-engines";
 import { ListenableProvider, TtsEngineType } from "./types";
@@ -178,10 +186,11 @@ export class ReadAloudSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("TTS engine")
       .setDesc(
-        "Use Local Piper CLI (desktop), Local GPU HTTP TTS (MLX-Audio on Apple Silicon / Kokoro-FastAPI on NVIDIA), or Web Speech API."
+        "Use Self-Contained Kokoro-82M (studio voices), Local Piper CLI (desktop), Local GPU HTTP TTS (/v1/audio/speech), or Web Speech API."
       )
       .addDropdown((dd) =>
         dd
+          .addOption("kokoro", "Kokoro-82M (Self-Contained Studio)")
           .addOption("piper", "Local Piper CLI (Desktop)")
           .addOption("http-tts", "Local GPU HTTP TTS (/v1/audio/speech)")
           .addOption("web-speech", "Web Speech API (Cross-Platform)")
@@ -195,7 +204,53 @@ export class ReadAloudSettingTab extends PluginSettingTab {
 
     const te = this.plugin.settings.ttsEngine;
 
-    if (te === "piper") {
+    if (te === "kokoro") {
+      const hw = detectHardware();
+      const status = getKokoroInstallStatus();
+
+      const setupSetting = new Setting(containerEl)
+        .setName("Kokoro-82M runtime & model")
+        .setDesc(
+          status.installed
+            ? `Installed (${hw.summary}). Managed worker stays warm for fast playback.`
+            : `Not installed. Detected: ${hw.summary}. Click Install to download isolated runtime + Kokoro-82M (~115 MB).`
+        )
+        .addButton((btn) =>
+          btn
+            .setButtonText(status.installed ? "Reinstall / Verify" : "Install Kokoro-82M")
+            .setCta()
+            .onClick(async () => {
+              btn.setDisabled(true);
+              btn.setButtonText("Installing...");
+              try {
+                await installKokoroSelfContained((msg) => {
+                  setupSetting.setDesc(msg);
+                });
+                new Notice("Kokoro-82M installed and ready!");
+                this.display();
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                new Notice(`Kokoro install failed: ${msg}`);
+                setupSetting.setDesc(`Install failed: ${msg}`);
+                btn.setDisabled(false);
+                btn.setButtonText("Retry Install");
+              }
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Kokoro voice")
+        .setDesc("Studio-quality 82M neural voices.")
+        .addDropdown((dd) => {
+          for (const v of KOKORO_VOICES) {
+            dd.addOption(v.id, v.label);
+          }
+          dd.setValue(this.plugin.settings.kokoroVoice).onChange(async (v) => {
+            this.plugin.settings.kokoroVoice = v;
+            await this.plugin.saveSettings();
+          });
+        });
+    } else if (te === "piper") {
       const discovered = discoverPiperModels();
       new Setting(containerEl)
         .setName("Piper binary")
@@ -225,6 +280,41 @@ export class ReadAloudSettingTab extends PluginSettingTab {
               this.plugin.settings.piperModelPath = v.trim();
               await this.plugin.saveSettings();
             })
+        );
+
+      let selectedPreset = PIPER_VOICE_PRESETS[0].id;
+      const presetSetting = new Setting(containerEl)
+        .setName("Download Piper voice")
+        .setDesc("One-click download into ~/.cache/obsidian-read-aloud/voices/piper/")
+        .addDropdown((dd) => {
+          for (const p of PIPER_VOICE_PRESETS) {
+            dd.addOption(p.id, p.label);
+          }
+          dd.setValue(selectedPreset).onChange((v) => {
+            selectedPreset = v;
+          });
+        })
+        .addButton((btn) =>
+          btn.setButtonText("Download").onClick(async () => {
+            const preset = PIPER_VOICE_PRESETS.find((p) => p.id === selectedPreset);
+            if (!preset) return;
+            btn.setDisabled(true);
+            btn.setButtonText("Downloading...");
+            try {
+              const onnxPath = await installPiperVoicePreset(preset, (msg) => {
+                presetSetting.setDesc(msg);
+              });
+              this.plugin.settings.piperModelPath = onnxPath;
+              await this.plugin.saveSettings();
+              new Notice(`Downloaded ${preset.id}`);
+              this.display();
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              new Notice(`Download failed: ${msg}`);
+              btn.setDisabled(false);
+              btn.setButtonText("Download");
+            }
+          })
         );
 
       new Setting(containerEl)
